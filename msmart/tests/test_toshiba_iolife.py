@@ -65,6 +65,14 @@ class TestToshibaIoLifeCommands(unittest.TestCase):
         self.assertEqual(response.indoor_temperature, 30.2)
         self.assertIsNone(response.outdoor_temperature)
         self.assertFalse(response.self_clean_active)
+        self.assertFalse(response.has_extended_state)
+        self.assertIsNone(response.quick_mode)
+        self.assertIsNone(response.air_monitor_enabled)
+        self.assertIsNone(response.radar_active)
+        self.assertIsNone(response.way_out)
+        self.assertIsNone(response.air_clean_active)
+        self.assertIsNone(response.air_clean_enabled)
+        self.assertIsNone(response.uvc_enabled)
 
     def test_parse_extended_response(self) -> None:
         response = StateResponse(self.EXTENDED_RESPONSE)
@@ -107,6 +115,14 @@ class TestToshibaIoLifeDevice(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(device.online)
         self.assertTrue(device.supported)
         self.assertEqual(device.target_temperature, 26.0)
+        self.assertIsNone(device.quick_mode)
+        self.assertIsNone(device.air_monitor_enabled)
+        self.assertIsNone(device.radar_active)
+        self.assertIsNone(device.way_out_enabled)
+        self.assertIsNone(device.air_clean_active)
+        self.assertIsNone(device.air_clean_enabled)
+        self.assertIsNone(device.uvc_enabled)
+        self.assertIsNone(device.timer_self_clean_enabled)
 
     async def test_set_automatic_cleaning(self) -> None:
         device = ToshibaIoLifeAirConditioner(

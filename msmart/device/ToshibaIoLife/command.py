@@ -232,7 +232,10 @@ class StateResponse:
         if data[14] not in (0x02, 0x03, 0x05) or data[16] not in (0xC0, 0xD0):
             raise ValueError("Unsupported Toshiba IoLIFE response")
 
-        body = data[16:]
+        # Exclude the frame CRC. Shorter J-DT responses end immediately after
+        # the base state payload; treating their CRC bytes as state caused
+        # checksum bits to be reported as unsupported extended features.
+        body = data[16:-2]
         self.power_on = bool(body[1] & 1)
         self.operational_mode = (body[2] >> 4) & 0x0F
         self.fan_speed = self._FAN_SPEEDS.get(body[3] & 0x7F, 102)
