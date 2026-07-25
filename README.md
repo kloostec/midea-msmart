@@ -156,6 +156,12 @@ and RAS-K221DRBK(W): power, auto/cool/dry/heat/fan modes, 0.5°C temperature
 steps, auto/high/medium/low/silent fan, horizontal and vertical sweep, eco,
 purifier, breezeless/no-wind mode, 50% rate selection, automatic cleaning
 after shutdown, active-cleaning state, filter state, and indoor humidity.
+Sweep axes are detected per model from the reported deflector data.
+
+Read-only telemetry includes actual fan speed, independent horizontal and
+vertical sweep activity, available deflector positions, power timers, and
+high-temperature monitoring. Models with the longer state frame also report
+radar-zone occupancy, defrost, and preheat status.
 
 K-DR models additionally report enhanced dehumidification, air-monitor and
 radar state, UV-C state, advanced no-wind and area modes, away and quick modes,

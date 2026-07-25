@@ -240,9 +240,23 @@ class StateResponse:
         self.operational_mode = (body[2] >> 4) & 0x0F
         self.fan_speed = self._FAN_SPEEDS.get(body[3] & 0x7F, 102)
         self.target_temperature = (body[4] & 0x7F) / 2
+        self.power_on_timer_enabled = bool(body[5] & 0x80)
+        self.power_on_timer_minutes = (
+            (body[5] & 0x7F) * 60 + body[6]
+            if self.power_on_timer_enabled
+            else None
+        )
+        self.power_off_timer_enabled = bool(body[7] & 0x80)
+        self.power_off_timer_minutes = (
+            (body[7] & 0x7F) * 60 + body[8]
+            if self.power_off_timer_enabled
+            else None
+        )
 
         swing_lr = body[11] & 0x0F
         swing_ud = (body[11] >> 4) & 0x0F
+        self.horizontal_swing_active = bool(swing_lr)
+        self.vertical_swing_active = bool(swing_ud)
         self.swing_mode = (0x03 if swing_lr else 0) | (0x0C if swing_ud else 0)
         self.indoor_humidity = None if body[10] == 0xFF else body[10]
         self.rate_select = body[12]
@@ -263,6 +277,8 @@ class StateResponse:
         # adjacent bits. The persistent automatic-cleaning preference is
         # queried separately through ToshibaProperty.CLEAN.
         self.self_clean_active = bool(body[16] & 0x30)
+        self.high_temperature_monitor_status = body[17] & 0x0F
+        self.high_temperature_monitor_enabled = bool(body[17] & 0x10)
         self.filter_alert = bool(body[17] & 0x20)
         self.error_code = body[23] if len(body) > 25 else None
 
@@ -283,10 +299,13 @@ class StateResponse:
         self.manual_defrost = None
         self.preheat_enabled = None
         self.preheat_active = None
+        self.defrost_active = None
+        self.radar_zone_mask = None
 
         if self.has_extended_state:
             extended_1 = body[24]
             extended_2 = body[25]
+            extended_3 = body[26]
             extended_4 = body[27]
             self.quick_mode = bool(extended_1 & 0x01)
             self.air_monitor_status = (extended_1 & 0x06) >> 1
@@ -298,6 +317,10 @@ class StateResponse:
             self.way_out = bool(extended_2 & 0x20)
             self.air_clean_active = bool(extended_2 & 0x40)
             self.air_clean_enabled = bool(extended_2 & 0x80)
+            self.defrost_active = bool(extended_2 & 0x10)
+            self.radar_zone_mask = extended_3 | (
+                (extended_2 & 0x01) << 8
+            )
             self.uvc_enabled = bool(extended_4 & 0x01)
             self.weak_cool = bool(extended_4 & 0x02)
             self.high_temperature_wind = bool(extended_4 & 0x04)

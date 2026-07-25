@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from msmart.device import ToshibaIoLifeAirConditioner
@@ -65,6 +66,14 @@ class TestToshibaIoLifeCommands(unittest.TestCase):
         self.assertEqual(response.indoor_temperature, 30.2)
         self.assertIsNone(response.outdoor_temperature)
         self.assertFalse(response.self_clean_active)
+        self.assertFalse(response.power_on_timer_enabled)
+        self.assertIsNone(response.power_on_timer_minutes)
+        self.assertFalse(response.power_off_timer_enabled)
+        self.assertIsNone(response.power_off_timer_minutes)
+        self.assertFalse(response.vertical_swing_active)
+        self.assertFalse(response.horizontal_swing_active)
+        self.assertFalse(response.high_temperature_monitor_enabled)
+        self.assertEqual(response.high_temperature_monitor_status, 0)
         self.assertFalse(response.has_extended_state)
         self.assertIsNone(response.quick_mode)
         self.assertIsNone(response.air_monitor_enabled)
@@ -82,6 +91,10 @@ class TestToshibaIoLifeCommands(unittest.TestCase):
         self.assertEqual(response.air_monitor_status, 1)
         self.assertTrue(response.radar_active)
         self.assertEqual(response.wind_radar_mode, 0)
+        self.assertEqual(response.radar_zone_mask, 0)
+        self.assertFalse(response.defrost_active)
+        self.assertFalse(response.preheat_enabled)
+        self.assertFalse(response.preheat_active)
         self.assertTrue(response.uvc_enabled)
         self.assertFalse(response.quick_mode)
 
@@ -134,3 +147,39 @@ class TestToshibaIoLifeDevice(unittest.IsolatedAsyncioTestCase):
         device.set_toshiba_properties.assert_awaited_once_with({
             ToshibaProperty.CLEAN: b"\x01\xff",
         })
+
+    def test_read_only_telemetry(self) -> None:
+        device = ToshibaIoLifeAirConditioner(
+            ip="127.0.0.1", port=6444, device_id=1)
+        device._update_toshiba_state(StateResponse(
+            TestToshibaIoLifeCommands.EXTENDED_RESPONSE
+        ))
+        device._update_toshiba_properties(SimpleNamespace(
+            properties={
+                ToshibaProperty.FAN_SPEED_REAL: b"\x32",
+                ToshibaProperty.SWING_UD: b"\x01",
+                ToshibaProperty.SWING_LR: b"\x00",
+                ToshibaProperty.WIND_DEFLECTOR: b"\x19\xff",
+                ToshibaProperty.POWER_ON_TIMER: b"\x00\x00\x00",
+                ToshibaProperty.POWER_OFF_TIMER: b"\x00\x00\x00",
+                ToshibaProperty.HIGH_TEMPERATURE_MONITOR: b"\x00\xff",
+                ToshibaProperty.WIND_RADAR: b"\x00",
+            },
+            errors={},
+        ))
+
+        self.assertEqual(device.actual_fan_speed, 50)
+        self.assertTrue(device.vertical_swing_active)
+        self.assertIsNone(device.horizontal_swing_active)
+        self.assertEqual(device.vertical_deflector_position, 25)
+        self.assertIsNone(device.horizontal_deflector_position)
+        self.assertFalse(device.power_on_timer_enabled)
+        self.assertIsNone(device.power_on_timer_minutes)
+        self.assertFalse(device.power_off_timer_enabled)
+        self.assertIsNone(device.power_off_timer_minutes)
+        self.assertFalse(device.high_temperature_monitor_enabled)
+        self.assertEqual(device.high_temperature_monitor_status, 0)
+        self.assertEqual(device.radar_zone_mask, 0)
+        self.assertFalse(device.defrost_active)
+        self.assertFalse(device.preheat_enabled)
+        self.assertFalse(device.preheat_active)

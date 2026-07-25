@@ -36,6 +36,14 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
         ToshibaProperty.TIMER_SELF_CLEAN,
         ToshibaProperty.FAVORITE_MODE,
     )
+    _TELEMETRY_PROPERTIES = (
+        ToshibaProperty.FAN_SPEED_REAL,
+        ToshibaProperty.SWING_UD,
+        ToshibaProperty.SWING_LR,
+        ToshibaProperty.POWER_ON_TIMER,
+        ToshibaProperty.POWER_OFF_TIMER,
+        ToshibaProperty.HIGH_TEMPERATURE_MONITOR,
+    )
 
     _FAN_SPEED_VALUES = {
         AirConditioner.FanSpeed.AUTO: 0x66,
@@ -60,6 +68,17 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
         self._automatic_cleaning_enabled: bool | None = None
         self._supported_toshiba_properties: set[ToshibaProperty] = set()
         self._has_extended_state = False
+        self._actual_fan_speed: int | None = None
+        self._vertical_swing_active: bool | None = None
+        self._horizontal_swing_active: bool | None = None
+        self._vertical_deflector_position: int | None = None
+        self._horizontal_deflector_position: int | None = None
+        self._power_on_timer_enabled: bool | None = None
+        self._power_on_timer_minutes: int | None = None
+        self._power_off_timer_enabled: bool | None = None
+        self._power_off_timer_minutes: int | None = None
+        self._high_temperature_monitor_enabled: bool | None = None
+        self._high_temperature_monitor_status: int | None = None
         self._wind_deflector: bytes | None = None
         self._dehumidification_mode: int | None = None
         self._advanced_no_wind_mode: int | None = None
@@ -75,6 +94,10 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
         self._air_monitor_enabled: bool | None = None
         self._radar_active: bool | None = None
         self._uvc_enabled: bool | None = None
+        self._defrost_active: bool | None = None
+        self._radar_zone_mask: int | None = None
+        self._preheat_enabled: bool | None = None
+        self._preheat_active: bool | None = None
         self._supported_op_modes = [
             AirConditioner.OperationalMode.AUTO,
             AirConditioner.OperationalMode.COOL,
@@ -125,6 +148,18 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             if response.no_wind_sense
             else AirConditioner.BreezeMode.OFF
         )
+        self._vertical_swing_active = response.vertical_swing_active
+        self._horizontal_swing_active = response.horizontal_swing_active
+        self._power_on_timer_enabled = response.power_on_timer_enabled
+        self._power_on_timer_minutes = response.power_on_timer_minutes
+        self._power_off_timer_enabled = response.power_off_timer_enabled
+        self._power_off_timer_minutes = response.power_off_timer_minutes
+        self._high_temperature_monitor_enabled = (
+            response.high_temperature_monitor_enabled
+        )
+        self._high_temperature_monitor_status = (
+            response.high_temperature_monitor_status
+        )
         self._has_extended_state = response.has_extended_state
         if response.has_extended_state:
             self._quick_mode = response.quick_mode
@@ -138,6 +173,10 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             self._air_clean_active = response.air_clean_active
             self._air_clean_enabled = response.air_clean_enabled
             self._uvc_enabled = response.uvc_enabled
+            self._defrost_active = response.defrost_active
+            self._radar_zone_mask = response.radar_zone_mask
+            self._preheat_enabled = response.preheat_enabled
+            self._preheat_active = response.preheat_active
         else:
             self._quick_mode = None
             self._air_monitor_status = None
@@ -150,6 +189,10 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             self._air_clean_active = None
             self._air_clean_enabled = None
             self._uvc_enabled = None
+            self._defrost_active = None
+            self._radar_zone_mask = None
+            self._preheat_enabled = None
+            self._preheat_active = None
 
     def _update_toshiba_properties(self, response: PropertiesResponse) -> None:
         for property_id, value in response.properties.items():
@@ -170,6 +213,9 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             self._automatic_cleaning_enabled = automatic_cleaning[0] > 0
 
         property_targets = (
+            (ToshibaProperty.FAN_SPEED_REAL, "_actual_fan_speed", int),
+            (ToshibaProperty.SWING_UD, "_vertical_swing_active", bool),
+            (ToshibaProperty.SWING_LR, "_horizontal_swing_active", bool),
             (ToshibaProperty.WIND_DEFLECTOR, "_wind_deflector", bytes),
             (ToshibaProperty.DEHUMIDIFY, "_dehumidification_mode", int),
             (ToshibaProperty.NEW_NO_WIND_SENSE,
@@ -195,14 +241,33 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             )
             setattr(self, attribute, parsed)
 
+        wind_deflector = response.properties.get(
+            ToshibaProperty.WIND_DEFLECTOR
+        )
+        if wind_deflector:
+            self._vertical_deflector_position = (
+                None if wind_deflector[0] == 0xFF else wind_deflector[0]
+            )
+            self._horizontal_deflector_position = (
+                None
+                if len(wind_deflector) < 2 or wind_deflector[1] == 0xFF
+                else wind_deflector[1]
+            )
+
     async def refresh(self) -> None:
         responses = await self._send_command(GetStateCommand())
-        responses.extend(await self._send_command(
-            GetPropertiesCommand([
-                ToshibaProperty.DISPLAY,
-                ToshibaProperty.CLEAN,
-                *self._EXTENDED_PROPERTIES,
-            ])))
+        refresh_properties = [
+            ToshibaProperty.DISPLAY,
+            ToshibaProperty.CLEAN,
+            *self._TELEMETRY_PROPERTIES,
+            *self._EXTENDED_PROPERTIES,
+        ]
+        for offset in range(0, len(refresh_properties), 16):
+            responses.extend(await self._send_command(
+                GetPropertiesCommand(
+                    refresh_properties[offset:offset + 16]
+                )
+            ))
         valid = 0
         for data in responses:
             try:
@@ -234,6 +299,7 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             ToshibaProperty.FILTER,
             ToshibaProperty.CLEAN,
             ToshibaProperty.RATE_SELECT,
+            *self._TELEMETRY_PROPERTIES,
             *self._EXTENDED_PROPERTIES,
         ])
         self._capabilities.set(
@@ -267,6 +333,25 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             ]
         else:
             self._supported_rate_selects = [AirConditioner.RateSelect.OFF]
+
+        wind_deflector = properties.get(ToshibaProperty.WIND_DEFLECTOR, b"")
+        supports_vertical_position = (
+            len(wind_deflector) >= 1 and wind_deflector[0] != 0xFF
+        )
+        supports_horizontal_position = (
+            len(wind_deflector) >= 2 and wind_deflector[1] != 0xFF
+        )
+        self._supported_swing_modes = [AirConditioner.SwingMode.OFF]
+        if supports_vertical_position:
+            self._supported_swing_modes.append(
+                AirConditioner.SwingMode.VERTICAL
+            )
+        if supports_horizontal_position:
+            self._supported_swing_modes.append(
+                AirConditioner.SwingMode.HORIZONTAL
+            )
+        if supports_vertical_position and supports_horizontal_position:
+            self._supported_swing_modes.append(AirConditioner.SwingMode.BOTH)
 
         await self.refresh()
 
@@ -354,6 +439,109 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
     ) -> bool:
         """Return whether a Toshiba-specific property returned a value."""
         return ToshibaProperty(property_id) in self._supported_toshiba_properties
+
+    @property
+    def actual_fan_speed(self) -> int | None:
+        """Return the reported real fan speed (0-102)."""
+        return (
+            self._actual_fan_speed
+            if self.supports_toshiba_property(ToshibaProperty.FAN_SPEED_REAL)
+            else None
+        )
+
+    @property
+    def vertical_swing_active(self) -> bool | None:
+        """Return whether the vertical deflector is sweeping."""
+        return (
+            self._vertical_swing_active
+            if self.vertical_deflector_position is not None
+            else None
+        )
+
+    @property
+    def horizontal_swing_active(self) -> bool | None:
+        """Return whether the horizontal deflector is sweeping."""
+        return (
+            self._horizontal_swing_active
+            if self.horizontal_deflector_position is not None
+            else None
+        )
+
+    @property
+    def vertical_deflector_position(self) -> int | None:
+        """Return the vertical deflector position reported by IoLIFE."""
+        return (
+            self._vertical_deflector_position
+            if self.supports_toshiba_property(ToshibaProperty.WIND_DEFLECTOR)
+            else None
+        )
+
+    @property
+    def horizontal_deflector_position(self) -> int | None:
+        """Return the horizontal deflector position reported by IoLIFE."""
+        return (
+            self._horizontal_deflector_position
+            if self.supports_toshiba_property(ToshibaProperty.WIND_DEFLECTOR)
+            else None
+        )
+
+    @property
+    def power_on_timer_enabled(self) -> bool | None:
+        """Return whether the appliance power-on timer is enabled."""
+        return (
+            self._power_on_timer_enabled
+            if self.supports_toshiba_property(ToshibaProperty.POWER_ON_TIMER)
+            else None
+        )
+
+    @property
+    def power_on_timer_minutes(self) -> int | None:
+        """Return minutes until the appliance power-on timer expires."""
+        return (
+            self._power_on_timer_minutes
+            if self.supports_toshiba_property(ToshibaProperty.POWER_ON_TIMER)
+            else None
+        )
+
+    @property
+    def power_off_timer_enabled(self) -> bool | None:
+        """Return whether the appliance power-off timer is enabled."""
+        return (
+            self._power_off_timer_enabled
+            if self.supports_toshiba_property(ToshibaProperty.POWER_OFF_TIMER)
+            else None
+        )
+
+    @property
+    def power_off_timer_minutes(self) -> int | None:
+        """Return minutes until the appliance power-off timer expires."""
+        return (
+            self._power_off_timer_minutes
+            if self.supports_toshiba_property(ToshibaProperty.POWER_OFF_TIMER)
+            else None
+        )
+
+    @property
+    def high_temperature_monitor_enabled(self) -> bool | None:
+        """Return whether high-temperature monitoring is enabled."""
+        return (
+            self._high_temperature_monitor_enabled
+            if self.supports_toshiba_property(
+                ToshibaProperty.HIGH_TEMPERATURE_MONITOR
+            )
+            else None
+        )
+
+    @property
+    def high_temperature_monitor_status(self) -> int | None:
+        """Return the high-temperature monitor status code."""
+        return (
+            self._high_temperature_monitor_status
+            if self.supports_toshiba_property(
+                ToshibaProperty.HIGH_TEMPERATURE_MONITOR
+            )
+            else None
+        )
 
     @property
     def wind_deflector(self) -> bytes | None:
@@ -450,6 +638,30 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
         return self._uvc_enabled if self._has_extended_state else None
 
     @property
+    def defrost_active(self) -> bool | None:
+        """Return whether the extended-state defrost cycle is active."""
+        return self._defrost_active if self._has_extended_state else None
+
+    @property
+    def radar_zone_mask(self) -> int | None:
+        """Return the nine-bit occupied radar-zone mask."""
+        return (
+            self._radar_zone_mask
+            if self.supports_toshiba_property(ToshibaProperty.WIND_RADAR)
+            else None
+        )
+
+    @property
+    def preheat_enabled(self) -> bool | None:
+        """Return whether preheating is enabled."""
+        return self._preheat_enabled if self._has_extended_state else None
+
+    @property
+    def preheat_active(self) -> bool | None:
+        """Return whether preheating is active."""
+        return self._preheat_active if self._has_extended_state else None
+
+    @property
     def timer_self_clean_enabled(self) -> bool | None:
         return (
             self._timer_self_clean_enabled
@@ -470,6 +682,20 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
         return {
             **super().to_dict(),
             "automatic_cleaning_enabled": self.automatic_cleaning_enabled,
+            "actual_fan_speed": self.actual_fan_speed,
+            "vertical_swing_active": self.vertical_swing_active,
+            "horizontal_swing_active": self.horizontal_swing_active,
+            "vertical_deflector_position": self.vertical_deflector_position,
+            "horizontal_deflector_position":
+                self.horizontal_deflector_position,
+            "power_on_timer_enabled": self.power_on_timer_enabled,
+            "power_on_timer_minutes": self.power_on_timer_minutes,
+            "power_off_timer_enabled": self.power_off_timer_enabled,
+            "power_off_timer_minutes": self.power_off_timer_minutes,
+            "high_temperature_monitor_enabled":
+                self.high_temperature_monitor_enabled,
+            "high_temperature_monitor_status":
+                self.high_temperature_monitor_status,
             "supported_toshiba_properties": [
                 prop.name.lower()
                 for prop in self.supported_toshiba_properties
@@ -491,6 +717,10 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             "air_clean_active": self.air_clean_active,
             "air_clean_enabled": self.air_clean_enabled,
             "uvc_enabled": self.uvc_enabled,
+            "defrost_active": self.defrost_active,
+            "radar_zone_mask": self.radar_zone_mask,
+            "preheat_enabled": self.preheat_enabled,
+            "preheat_active": self.preheat_active,
             "timer_self_clean_enabled": self.timer_self_clean_enabled,
             "favorite_mode": (
                 self.favorite_mode.hex()
