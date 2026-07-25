@@ -396,8 +396,14 @@ class Discover:
             _LOGGER.error(e)
             return None
 
-        # Build device from type
-        dev = Device.construct(type=info["device_type"], **info)
+        # Toshiba IoLIFE adapters advertise a Midea-compatible outer protocol,
+        # but use Toshiba 55AACC33 appliance frames instead of standard AA AC
+        # frames.
+        if info["name"].lower().startswith("toshiba_ac_"):
+            from msmart.device import ToshibaIoLifeAirConditioner
+            dev = ToshibaIoLifeAirConditioner(**info)
+        else:
+            dev = Device.construct(type=info["device_type"], **info)
 
         # Don't query device if requested
         if cls._auto_connect:

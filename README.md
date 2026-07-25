@@ -11,6 +11,7 @@ This library supports air conditioners from Midea and several associated brands 
 * NetHome Plus (com.midea.aircondition)
 * SmartHome/MSmartHome (com.midea.ai.overseas)
 * Toshiba AC NA (com.midea.toshiba)
+* Toshiba IoLIFE Japan (`Toshiba_ac_*` local adapters)
 * 美的美居 (com.midea.ai.appliances)
   
 __Note: Only air conditioners (type 0xAC and 0xCC) are supported. See the [usage](#usage) section for how to check compatibility.__ 
@@ -137,6 +138,46 @@ $ msmart-ng control <HOST> operational_mode=cool target_temperature=20.5 fan_spe
 **Note:** Version 3 devices need to specify either the `--auto` argument or the `--token`, `--key` and `--id` arguments to make a connection.
 
 **Note:** For CC devices, either the `--auto` argument or the `--device_type` argument must be specified.
+
+#### Toshiba IoLIFE
+
+Japanese Toshiba IoLIFE adapters use Midea V3 authentication and transport,
+but their appliance commands use Toshiba `55 AA CC 33` frames. Discovery
+automatically selects `ToshibaIoLifeAirConditioner` for adapters named
+`Toshiba_ac_*`. Direct connections must use:
+
+```shell
+msmart-ng query --device_type TOSHIBA_IOLIFE \
+  --id <DEVICE_ID> --token <TOKEN> --key <KEY> <HOST>
+```
+
+The standard AC interface exposes the controls confirmed on RAS-J221DTBK(W)
+and RAS-K221DRBK(W): power, auto/cool/dry/heat/fan modes, 0.5°C temperature
+steps, auto/high/medium/low/silent fan, horizontal and vertical sweep, eco,
+purifier, breezeless/no-wind mode, 50% rate selection, cleaning, filter state,
+and indoor humidity.
+
+The adapters report display state but ignore display writes. They also report
+no support for Midea-only controls such as turbo, iECO, freeze protection,
+follow-me, fresh air, cascade, auxiliary heat, and energy statistics. These
+capabilities are therefore not advertised.
+
+Model-specific IoLIFE properties are available through the typed raw API:
+
+```python
+from msmart.device.ToshibaIoLife.command import ToshibaProperty
+
+values = await device.get_toshiba_properties()
+ai_enabled = values[ToshibaProperty.AI_STUDY_CONTROL]
+
+await device.set_toshiba_properties({
+    ToshibaProperty.HIGH_TEMPERATURE_MONITOR: 1,
+})
+```
+
+Raw property writes should only be used when the property value format is
+known for the specific model. Zero-length query values indicate that the
+firmware does not support that property.
 
 ### Home Assistant
 To control your Midea AC units via Home Assistant, use this [midea-ac-py](https://github.com/mill1000/midea-ac-py) fork.

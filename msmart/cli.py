@@ -10,6 +10,7 @@ from msmart.cloud import CloudError, NetHomePlusCloud, SmartHomeCloud
 from msmart.const import DEFAULT_CLOUD_REGION, DeviceType
 from msmart.device import AirConditioner as AC
 from msmart.device import CommercialAirConditioner as CC
+from msmart.device import ToshibaIoLifeAirConditioner as ToshibaIoLifeAC
 from msmart.discover import Discover
 from msmart.lan import AuthenticationError
 from msmart.utils import MideaIntEnum
@@ -24,7 +25,17 @@ DEFAULT_CLOUD_ACCOUNT, DEFAULT_CLOUD_PASSWORD = CLOUD_CREDENTIALS[DEFAULT_CLOUD_
 DEVICE_TYPES = {
     "AC": DeviceType.AIR_CONDITIONER,
     "CC": DeviceType.COMMERCIAL_AC,
+    "TOSHIBA_IOLIFE": DeviceType.AIR_CONDITIONER,
 }
+
+
+def _construct_device(device_type: str | None, **kwargs) -> Device:
+    if device_type == "TOSHIBA_IOLIFE":
+        return ToshibaIoLifeAC(**kwargs)
+    return Device.construct(
+        type=DEVICE_TYPES.get(device_type, DeviceType.AIR_CONDITIONER),
+        **kwargs
+    )
 
 
 async def _discover(args) -> None:
@@ -72,9 +83,8 @@ async def _connect(args) -> Union[AC, CC]:
             _LOGGER.error("Device not found.")
             exit(1)
     else:
-        device = Device.construct(
-            type=DEVICE_TYPES.get(
-                args.device_type, DeviceType.AIR_CONDITIONER),
+        device = _construct_device(
+            args.device_type,
             ip=args.host,
             port=6444,
             device_id=args.device_id
@@ -182,8 +192,8 @@ async def _control(args) -> None:
     # Create a dummy device instance for property validation
     device_type = DEVICE_TYPES.get(
         args.device_type, DeviceType.AIR_CONDITIONER)
-    dummy_device = Device.construct(
-        type=device_type,
+    dummy_device = _construct_device(
+        args.device_type,
         ip="0.0.0.0",
         device_id=0,
         port=6444
