@@ -256,7 +256,9 @@ class StateResponse:
         )
         self.eco = bool(body[16] & 0x01)
         self.purifier = bool(body[16] & 0x02)
-        # Toshiba reports manual and automatic cleaning in adjacent bits.
+        # Toshiba reports active manual/automatic cleaning cycles in
+        # adjacent bits. The persistent automatic-cleaning preference is
+        # queried separately through ToshibaProperty.CLEAN.
         self.self_clean_active = bool(body[16] & 0x30)
         self.filter_alert = bool(body[17] & 0x20)
         self.error_code = body[23] if len(body) > 25 else None

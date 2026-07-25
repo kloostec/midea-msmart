@@ -154,7 +154,8 @@ msmart-ng query --device_type TOSHIBA_IOLIFE \
 The standard AC interface exposes the controls confirmed on RAS-J221DTBK(W)
 and RAS-K221DRBK(W): power, auto/cool/dry/heat/fan modes, 0.5°C temperature
 steps, auto/high/medium/low/silent fan, horizontal and vertical sweep, eco,
-purifier, breezeless/no-wind mode, 50% rate selection, cleaning, filter state,
+purifier, breezeless/no-wind mode, 50% rate selection, automatic cleaning
+after shutdown, active-cleaning state, filter state,
 and indoor humidity.
 
 The adapters report display state but ignore display writes. They also report

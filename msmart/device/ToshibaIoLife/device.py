@@ -40,10 +40,11 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             AirConditioner.Capability.ECO
             | AirConditioner.Capability.PURIFIER
             | AirConditioner.Capability.FILTER_REMINDER
-            | AirConditioner.Capability.SELF_CLEAN
             | AirConditioner.Capability.HUMIDITY
             | AirConditioner.Capability.BREEZELESS
         )
+        self._supports_automatic_cleaning = True
+        self._automatic_cleaning_enabled: bool | None = None
         self._supported_op_modes = [
             AirConditioner.OperationalMode.AUTO,
             AirConditioner.OperationalMode.COOL,
@@ -107,10 +108,17 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
         if display:
             self._display_on = display[0] > 0
 
+        automatic_cleaning = response.properties.get(ToshibaProperty.CLEAN)
+        if automatic_cleaning:
+            self._automatic_cleaning_enabled = automatic_cleaning[0] > 0
+
     async def refresh(self) -> None:
         responses = await self._send_command(GetStateCommand())
         responses.extend(await self._send_command(
-            GetPropertiesCommand([ToshibaProperty.DISPLAY])))
+            GetPropertiesCommand([
+                ToshibaProperty.DISPLAY,
+                ToshibaProperty.CLEAN,
+            ])))
         valid = 0
         for data in responses:
             try:
@@ -163,9 +171,10 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
         self._capabilities.set(
             AirConditioner.Capability.FILTER_REMINDER,
             bool(properties.get(ToshibaProperty.FILTER)))
-        self._capabilities.set(
-            AirConditioner.Capability.SELF_CLEAN,
-            bool(properties.get(ToshibaProperty.CLEAN)))
+        self._supports_automatic_cleaning = (
+            ToshibaProperty.CLEAN in properties
+            and bool(properties[ToshibaProperty.CLEAN])
+        )
         if properties.get(ToshibaProperty.RATE_SELECT):
             self._supported_rate_selects = [
                 AirConditioner.RateSelect.OFF,
@@ -220,19 +229,31 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             "Device %s reports display state but ignores display control.",
             self.id)
 
-    async def set_self_clean(self, enabled: bool) -> None:
-        """Enable or disable the Toshiba cleaning function."""
+    @property
+    def supports_automatic_cleaning(self) -> bool:
+        """Return whether automatic cleaning after shutdown is supported."""
+        return self._supports_automatic_cleaning
+
+    @property
+    def automatic_cleaning_enabled(self) -> bool | None:
+        """Return the persistent automatic-cleaning preference."""
+        return self._automatic_cleaning_enabled
+
+    async def set_automatic_cleaning(self, enabled: bool) -> None:
+        """Enable or disable automatic cleaning after shutdown."""
         await self.set_toshiba_properties({
-            ToshibaProperty.CLEAN: int(enabled),
+            # IoLIFE writes a two-byte cleanAutoValue. The second byte is
+            # reserved and reported as FF by the appliance.
+            ToshibaProperty.CLEAN: bytes((int(enabled), 0xFF)),
         })
 
-    async def start_self_clean(self) -> None:
-        """Enable the Toshiba cleaning function."""
-        await self.set_self_clean(True)
+    async def enable_automatic_cleaning(self) -> None:
+        """Enable automatic cleaning after shutdown."""
+        await self.set_automatic_cleaning(True)
 
-    async def stop_self_clean(self) -> None:
-        """Disable the Toshiba cleaning function."""
-        await self.set_self_clean(False)
+    async def disable_automatic_cleaning(self) -> None:
+        """Disable automatic cleaning after shutdown."""
+        await self.set_automatic_cleaning(False)
 
     async def apply(self) -> None:
         if self._operational_mode not in self._supported_op_modes:

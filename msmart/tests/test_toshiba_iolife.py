@@ -26,6 +26,13 @@ class TestToshibaIoLifeCommands(unittest.TestCase):
             "55aacc33160001ac0000000000000200b001"))
         self.assertEqual(data[18:22], bytes.fromhex("01000101"))
 
+    def test_automatic_cleaning_control_frame(self) -> None:
+        data = SetStateCommand(
+            [(ToshibaProperty.CLEAN, b"\x01\xff")],
+            message_id=1,
+        ).tobytes()
+        self.assertEqual(data[18:23], bytes.fromhex("46000201ff"))
+
     def test_property_query_frame(self) -> None:
         data = GetPropertiesCommand(
             [ToshibaProperty.POWER, ToshibaProperty.MODE],
@@ -65,7 +72,8 @@ class TestToshibaIoLifeDevice(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(device.supports_purifier)
         self.assertTrue(device.supports_breezeless)
         self.assertTrue(device.supports_humidity)
-        self.assertTrue(device.supports_self_clean)
+        self.assertFalse(device.supports_self_clean)
+        self.assertTrue(device.supports_automatic_cleaning)
         self.assertFalse(device.supports_display_control)
         self.assertEqual(
             device.supported_rate_selects,
@@ -83,3 +91,14 @@ class TestToshibaIoLifeDevice(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(device.online)
         self.assertTrue(device.supported)
         self.assertEqual(device.target_temperature, 26.0)
+
+    async def test_set_automatic_cleaning(self) -> None:
+        device = ToshibaIoLifeAirConditioner(
+            ip="127.0.0.1", port=6444, device_id=1)
+        device.set_toshiba_properties = AsyncMock()
+
+        await device.set_automatic_cleaning(True)
+
+        device.set_toshiba_properties.assert_awaited_once_with({
+            ToshibaProperty.CLEAN: b"\x01\xff",
+        })
