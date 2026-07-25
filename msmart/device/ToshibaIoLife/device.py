@@ -22,6 +22,8 @@ _LOGGER = logging.getLogger(__name__)
 class ToshibaIoLifeAirConditioner(AirConditioner):
     """Toshiba AC using 55AACC33 appliance frames over Midea V3 transport."""
 
+    is_toshiba_iolife = True
+
     _FAN_SPEED_VALUES = {
         AirConditioner.FanSpeed.AUTO: 0x66,
         AirConditioner.FanSpeed.MAX: 0x50,

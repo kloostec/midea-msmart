@@ -60,6 +60,7 @@ class TestToshibaIoLifeDevice(unittest.IsolatedAsyncioTestCase):
         device = ToshibaIoLifeAirConditioner(
             ip="127.0.0.1", port=6444, device_id=1)
 
+        self.assertTrue(device.is_toshiba_iolife)
         self.assertTrue(device.supports_eco)
         self.assertTrue(device.supports_purifier)
         self.assertTrue(device.supports_breezeless)
