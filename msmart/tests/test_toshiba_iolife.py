@@ -12,6 +12,11 @@ class TestToshibaIoLifeCommands(unittest.TestCase):
         "55aacc33280001ac0000000000000380c0002066b47fff7fff"
         "002b00646efff2000000f0f0000000009f10e3"
     )
+    EXTENDED_RESPONSE = bytes.fromhex(
+        "55aacc33300001ac0000000000000380"
+        "c0012266b47fff7fff0037116468767402000019010200000a"
+        "02000100000000002ad9f7"
+    )
 
     def test_query_frame(self) -> None:
         data = GetStateCommand(message_id=1).tobytes()
@@ -60,6 +65,17 @@ class TestToshibaIoLifeCommands(unittest.TestCase):
         self.assertEqual(response.indoor_temperature, 30.2)
         self.assertIsNone(response.outdoor_temperature)
         self.assertFalse(response.self_clean_active)
+
+    def test_parse_extended_response(self) -> None:
+        response = StateResponse(self.EXTENDED_RESPONSE)
+
+        self.assertTrue(response.has_extended_state)
+        self.assertTrue(response.air_monitor_enabled)
+        self.assertEqual(response.air_monitor_status, 1)
+        self.assertTrue(response.radar_active)
+        self.assertEqual(response.wind_radar_mode, 0)
+        self.assertTrue(response.uvc_enabled)
+        self.assertFalse(response.quick_mode)
 
 
 class TestToshibaIoLifeDevice(unittest.IsolatedAsyncioTestCase):

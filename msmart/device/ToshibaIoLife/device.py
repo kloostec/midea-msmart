@@ -24,6 +24,19 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
 
     is_toshiba_iolife = True
 
+    _EXTENDED_PROPERTIES = (
+        ToshibaProperty.WIND_DEFLECTOR,
+        ToshibaProperty.DEHUMIDIFY,
+        ToshibaProperty.NEW_NO_WIND_SENSE,
+        ToshibaProperty.WIND_RADAR,
+        ToshibaProperty.AREA,
+        ToshibaProperty.WAY_OUT,
+        ToshibaProperty.QUICK_MODE,
+        ToshibaProperty.AIR_CLEAN_SWITCH,
+        ToshibaProperty.TIMER_SELF_CLEAN,
+        ToshibaProperty.FAVORITE_MODE,
+    )
+
     _FAN_SPEED_VALUES = {
         AirConditioner.FanSpeed.AUTO: 0x66,
         AirConditioner.FanSpeed.MAX: 0x50,
@@ -45,6 +58,22 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
         )
         self._supports_automatic_cleaning = True
         self._automatic_cleaning_enabled: bool | None = None
+        self._supported_toshiba_properties: set[ToshibaProperty] = set()
+        self._wind_deflector: bytes | None = None
+        self._dehumidification_mode: int | None = None
+        self._advanced_no_wind_mode: int | None = None
+        self._wind_radar_mode: int | None = None
+        self._area_mode: int | None = None
+        self._way_out_enabled: bool | None = None
+        self._quick_mode: bool | None = None
+        self._air_clean_active: bool | None = None
+        self._air_clean_enabled: bool | None = None
+        self._timer_self_clean_enabled: bool | None = None
+        self._favorite_mode: bytes | None = None
+        self._air_monitor_status: int | None = None
+        self._air_monitor_enabled: bool | None = None
+        self._radar_active: bool | None = None
+        self._uvc_enabled: bool | None = None
         self._supported_op_modes = [
             AirConditioner.OperationalMode.AUTO,
             AirConditioner.OperationalMode.COOL,
@@ -95,6 +124,18 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             if response.no_wind_sense
             else AirConditioner.BreezeMode.OFF
         )
+        if response.has_extended_state:
+            self._quick_mode = response.quick_mode
+            self._air_monitor_status = response.air_monitor_status
+            self._air_monitor_enabled = response.air_monitor_enabled
+            self._advanced_no_wind_mode = response.advanced_no_wind_mode
+            self._area_mode = response.area_mode
+            self._radar_active = response.radar_active
+            self._wind_radar_mode = response.wind_radar_mode
+            self._way_out_enabled = response.way_out
+            self._air_clean_active = response.air_clean_active
+            self._air_clean_enabled = response.air_clean_enabled
+            self._uvc_enabled = response.uvc_enabled
 
     def _update_toshiba_properties(self, response: PropertiesResponse) -> None:
         for property_id, value in response.properties.items():
@@ -103,6 +144,8 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             except ValueError:
                 continue
             self._toshiba_properties[prop] = value
+            if value and property_id not in response.errors:
+                self._supported_toshiba_properties.add(prop)
 
         display = response.properties.get(ToshibaProperty.DISPLAY)
         if display:
@@ -112,12 +155,39 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
         if automatic_cleaning:
             self._automatic_cleaning_enabled = automatic_cleaning[0] > 0
 
+        property_targets = (
+            (ToshibaProperty.WIND_DEFLECTOR, "_wind_deflector", bytes),
+            (ToshibaProperty.DEHUMIDIFY, "_dehumidification_mode", int),
+            (ToshibaProperty.NEW_NO_WIND_SENSE,
+             "_advanced_no_wind_mode", int),
+            (ToshibaProperty.WIND_RADAR, "_wind_radar_mode", int),
+            (ToshibaProperty.AREA, "_area_mode", int),
+            (ToshibaProperty.WAY_OUT, "_way_out_enabled", bool),
+            (ToshibaProperty.QUICK_MODE, "_quick_mode", bool),
+            (ToshibaProperty.TIMER_SELF_CLEAN,
+             "_timer_self_clean_enabled", bool),
+            (ToshibaProperty.FAVORITE_MODE, "_favorite_mode", bytes),
+        )
+        for property_id, attribute, value_type in property_targets:
+            value = response.properties.get(property_id)
+            if not value:
+                continue
+            parsed = (
+                value
+                if value_type is bytes
+                else value[0] > 0
+                if value_type is bool
+                else value[0]
+            )
+            setattr(self, attribute, parsed)
+
     async def refresh(self) -> None:
         responses = await self._send_command(GetStateCommand())
         responses.extend(await self._send_command(
             GetPropertiesCommand([
                 ToshibaProperty.DISPLAY,
                 ToshibaProperty.CLEAN,
+                *self._EXTENDED_PROPERTIES,
             ])))
         valid = 0
         for data in responses:
@@ -150,6 +220,7 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
             ToshibaProperty.FILTER,
             ToshibaProperty.CLEAN,
             ToshibaProperty.RATE_SELECT,
+            *self._EXTENDED_PROPERTIES,
         ])
         self._capabilities.set(
             AirConditioner.Capability.ECO,
@@ -254,6 +325,115 @@ class ToshibaIoLifeAirConditioner(AirConditioner):
     async def disable_automatic_cleaning(self) -> None:
         """Disable automatic cleaning after shutdown."""
         await self.set_automatic_cleaning(False)
+
+    @property
+    def supported_toshiba_properties(self) -> tuple[ToshibaProperty, ...]:
+        """Return Toshiba-specific properties confirmed by the appliance."""
+        return tuple(sorted(
+            self._supported_toshiba_properties,
+            key=int,
+        ))
+
+    def supports_toshiba_property(
+        self,
+        property_id: ToshibaProperty | int,
+    ) -> bool:
+        """Return whether a Toshiba-specific property returned a value."""
+        return ToshibaProperty(property_id) in self._supported_toshiba_properties
+
+    @property
+    def wind_deflector(self) -> bytes | None:
+        return self._wind_deflector
+
+    @property
+    def dehumidification_mode(self) -> int | None:
+        return self._dehumidification_mode
+
+    @property
+    def advanced_no_wind_mode(self) -> int | None:
+        return self._advanced_no_wind_mode
+
+    @property
+    def wind_radar_mode(self) -> int | None:
+        return self._wind_radar_mode
+
+    @property
+    def radar_active(self) -> bool | None:
+        return self._radar_active
+
+    @property
+    def area_mode(self) -> int | None:
+        return self._area_mode
+
+    @property
+    def way_out_enabled(self) -> bool | None:
+        return self._way_out_enabled
+
+    @property
+    def quick_mode(self) -> bool | None:
+        return self._quick_mode
+
+    @property
+    def air_monitor_status(self) -> int | None:
+        return self._air_monitor_status
+
+    @property
+    def air_monitor_enabled(self) -> bool | None:
+        return self._air_monitor_enabled
+
+    @property
+    def air_clean_active(self) -> bool | None:
+        return self._air_clean_active
+
+    @property
+    def air_clean_enabled(self) -> bool | None:
+        return self._air_clean_enabled
+
+    @property
+    def uvc_enabled(self) -> bool | None:
+        return self._uvc_enabled
+
+    @property
+    def timer_self_clean_enabled(self) -> bool | None:
+        return self._timer_self_clean_enabled
+
+    @property
+    def favorite_mode(self) -> bytes | None:
+        return self._favorite_mode
+
+    def to_dict(self) -> dict:
+        """Return standard AC state plus Toshiba IoLIFE extensions."""
+        return {
+            **super().to_dict(),
+            "automatic_cleaning_enabled": self.automatic_cleaning_enabled,
+            "supported_toshiba_properties": [
+                prop.name.lower()
+                for prop in self.supported_toshiba_properties
+            ],
+            "wind_deflector": (
+                self.wind_deflector.hex()
+                if self.wind_deflector is not None
+                else None
+            ),
+            "dehumidification_mode": self.dehumidification_mode,
+            "advanced_no_wind_mode": self.advanced_no_wind_mode,
+            "wind_radar_mode": self.wind_radar_mode,
+            "radar_active": self.radar_active,
+            "area_mode": self.area_mode,
+            "way_out_enabled": self.way_out_enabled,
+            "quick_mode": self.quick_mode,
+            "air_monitor_status": self.air_monitor_status,
+            "air_monitor_enabled": self.air_monitor_enabled,
+            "air_clean_active": self.air_clean_active,
+            "air_clean_enabled": self.air_clean_enabled,
+            "uvc_enabled": self.uvc_enabled,
+            "timer_self_clean_enabled": self.timer_self_clean_enabled,
+            "favorite_mode": (
+                self.favorite_mode.hex()
+                if self.favorite_mode is not None
+                else None
+            ),
+        }
 
     async def apply(self) -> None:
         if self._operational_mode not in self._supported_op_modes:

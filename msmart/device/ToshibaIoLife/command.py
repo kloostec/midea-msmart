@@ -262,3 +262,42 @@ class StateResponse:
         self.self_clean_active = bool(body[16] & 0x30)
         self.filter_alert = bool(body[17] & 0x20)
         self.error_code = body[23] if len(body) > 25 else None
+
+        self.has_extended_state = len(body) > 27
+        self.quick_mode = None
+        self.air_monitor_status = None
+        self.air_monitor_enabled = None
+        self.advanced_no_wind_mode = None
+        self.area_mode = None
+        self.radar_active = None
+        self.wind_radar_mode = None
+        self.way_out = None
+        self.air_clean_active = None
+        self.air_clean_enabled = None
+        self.uvc_enabled = None
+        self.weak_cool = None
+        self.high_temperature_wind = None
+        self.manual_defrost = None
+        self.preheat_enabled = None
+        self.preheat_active = None
+
+        if self.has_extended_state:
+            extended_1 = body[24]
+            extended_2 = body[25]
+            extended_4 = body[27]
+            self.quick_mode = bool(extended_1 & 0x01)
+            self.air_monitor_status = (extended_1 & 0x06) >> 1
+            self.air_monitor_enabled = bool(extended_1 & 0x08)
+            self.advanced_no_wind_mode = (extended_1 & 0x30) >> 4
+            self.area_mode = (extended_1 & 0xC0) >> 6
+            self.radar_active = bool(extended_2 & 0x02)
+            self.wind_radar_mode = (extended_2 & 0x0C) >> 2
+            self.way_out = bool(extended_2 & 0x20)
+            self.air_clean_active = bool(extended_2 & 0x40)
+            self.air_clean_enabled = bool(extended_2 & 0x80)
+            self.uvc_enabled = bool(extended_4 & 0x01)
+            self.weak_cool = bool(extended_4 & 0x02)
+            self.high_temperature_wind = bool(extended_4 & 0x04)
+            self.manual_defrost = bool(extended_4 & 0x08)
+            self.preheat_enabled = bool(extended_4 & 0x10)
+            self.preheat_active = bool(extended_4 & 0x20)

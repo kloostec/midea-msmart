@@ -155,8 +155,14 @@ The standard AC interface exposes the controls confirmed on RAS-J221DTBK(W)
 and RAS-K221DRBK(W): power, auto/cool/dry/heat/fan modes, 0.5°C temperature
 steps, auto/high/medium/low/silent fan, horizontal and vertical sweep, eco,
 purifier, breezeless/no-wind mode, 50% rate selection, automatic cleaning
-after shutdown, active-cleaning state, filter state,
-and indoor humidity.
+after shutdown, active-cleaning state, filter state, and indoor humidity.
+
+K-DR models additionally report enhanced dehumidification, air-monitor and
+radar state, UV-C state, advanced no-wind and area modes, away and quick modes,
+air-clean state, scheduled self-cleaning, wind-deflector data, and favorite
+mode data. These are exposed as typed read-only properties alongside the raw
+Toshiba property API until their model-specific control value ranges have been
+verified.
 
 The adapters report display state but ignore display writes. They also report
 no support for Midea-only controls such as turbo, iECO, freeze protection,
